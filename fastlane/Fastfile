@@ -30,6 +30,7 @@ platform :ios do
         provisioningProfiles: {
           "com.fantasyclimbingleague.app" => "match AppStore com.fantasyclimbingleague.app",
         },
+        entitlements: "ios/FantasyClimbingLeague/FantasyClimbingLeague.entitlements",
       },
     )
   end

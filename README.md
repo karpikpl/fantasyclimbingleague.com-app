@@ -2,7 +2,26 @@
 
 iPhone (React Native) app for [fantasyclimbingleague.com](https://fantasyclimbingleague.com).
 
-This app wraps the Fantasy Climbing League website in a native iOS shell, enabling App Store distribution. It uses GitHub Actions with macOS runners so you can build and publish **without a Mac**.
+This is a **native iOS app** with a WebView core, giving you native platform features (Face ID, push notifications) while serving the full website. It uses GitHub Actions with macOS runners so you can build and publish **without a Mac**.
+
+---
+
+## Native Features
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| **Face ID / Touch ID** | ✅ | Biometric authentication gate on every app launch |
+| **Push Notifications** | ✅ | APNs registration, foreground/background delivery |
+| **Swipe navigation** | ✅ | Back/forward gestures (iOS native feel) |
+| **Safe area** | ✅ | Respects notch and home indicator |
+| **Cookie persistence** | ✅ | Stays logged in between sessions |
+| **Inline video** | ✅ | Plays video content without fullscreen |
+
+### Face ID / Touch ID
+On launch the app presents a biometric authentication prompt (Face ID on Face ID devices, Touch ID on older iPhones). If the device has no biometrics the user goes straight to the app. If the user cancels they see a lock screen with an "Unlock" button to retry.
+
+### Push Notifications
+The app requests notification permission after the first successful authentication. The APNs device token is logged to the console — wire it up to your notification server (Firebase, OneSignal, etc.) to send notifications like "New competition added!" or "Your score has been updated!".
 
 ---
 
@@ -36,46 +55,77 @@ npm run lint
 
 Publishing is fully automated via **GitHub Actions** + **Fastlane**. The macOS runner in GitHub Actions takes care of all macOS/Xcode operations.
 
-### One-time Setup
+### Step-by-step Guide
 
-#### 1. Apple Developer Account
-- Enroll at [developer.apple.com](https://developer.apple.com)
-- Create an App ID: `com.fantasyclimbingleague.app`
-- Create the app record in [App Store Connect](https://appstoreconnect.apple.com)
+#### Step 1 — Apple Developer Account
+1. Enroll at [developer.apple.com](https://developer.apple.com) ($99/year)
+2. Open [App Store Connect](https://appstoreconnect.apple.com) → **My Apps** → **+** → **New App**
+3. Fill in:
+   - **Platform**: iOS
+   - **Name**: Fantasy Climbing  *(the user-facing display name — `CFBundleDisplayName` in Info.plist)*
+   - **Primary Language**: English
+   - **Bundle ID**: `com.fantasyclimbingleague.app`
+   - **SKU**: any unique string (e.g. `fantasy-climbing-001`)
+4. Note your **Apple App ID** (numeric, shown in the URL)
 
-#### 2. App Store Connect API Key
-Generate an API key at **App Store Connect → Users and Access → Keys**:
-- Role: **App Manager** (or Admin)
-- Download the `.p8` file — you can only download it once
+#### Step 2 — App Store Connect API Key
+1. Go to **App Store Connect → Users and Access → Integrations → API Keys**
+2. Click **+** → set name "CI" → role **App Manager**
+3. Download the `.p8` file (you can only download it **once**)
+4. Note the **Key ID** and **Issuer ID** shown on the page
 
-#### 3. Fastlane Match (Code Signing)
-[Match](https://docs.fastlane.tools/actions/match/) manages certificates and provisioning profiles in a private Git repository.
+#### Step 3 — Fastlane Match (Code Signing)
+[Match](https://docs.fastlane.tools/actions/match/) stores certificates in a private Git repo so any machine (including CI) can sign your app.
 
 ```bash
-# Create a private Git repo for certificates (e.g., github.com/yourorg/certificates)
-# Then initialize match:
+# 1. Create a PRIVATE GitHub repo for certificates, e.g. github.com/you/certs
+
+# 2. On any Mac (or the first CI run), initialize match:
 bundle exec fastlane match init
+# → enter your private cert repo SSH URL when prompted
+
+# 3. Generate App Store certificates and profiles:
 bundle exec fastlane match appstore
+# → set a strong passphrase when prompted (save it as MATCH_PASSWORD secret)
 ```
 
-#### 4. GitHub Secrets
-Add the following secrets to your repository (**Settings → Secrets and variables → Actions**):
+#### Step 4 — GitHub Repository Secrets
 
-| Secret | Description |
-|--------|-------------|
-| `APPLE_ID` | Your Apple ID email |
-| `APPLE_APP_ID` | App Store Connect numeric App ID |
-| `APPLE_TEAM_ID` | Apple Developer Team ID |
-| `ITC_TEAM_ID` | App Store Connect Team ID |
-| `MATCH_GIT_URL` | SSH URL of your certificates repo |
-| `MATCH_SSH_PRIVATE_KEY` | SSH private key with access to certificates repo |
-| `MATCH_PASSWORD` | Password used to encrypt Match certificates |
-| `APP_STORE_CONNECT_API_KEY_ID` | Key ID from step 2 |
-| `APP_STORE_CONNECT_API_ISSUER_ID` | Issuer ID from step 2 |
-| `APP_STORE_CONNECT_API_KEY_CONTENT` | Contents of the `.p8` file |
+Go to **GitHub repo → Settings → Environments** and create an environment named **`appstore`**. Then add these secrets inside that environment:
 
-#### 5. GitHub Environment
-Create a GitHub environment named **`appstore`** (**Settings → Environments**) and add the secrets there for extra protection.
+| Secret | Where to find it |
+|--------|-----------------|
+| `APPLE_ID` | Your Apple ID email address |
+| `APPLE_APP_ID` | Numeric App ID from Step 1 |
+| `APPLE_TEAM_ID` | [developer.apple.com/account](https://developer.apple.com/account) → Membership → Team ID |
+| `ITC_TEAM_ID` | App Store Connect → Users and Access → your team number |
+| `MATCH_GIT_URL` | SSH URL of your certificates repo (e.g. `git@github.com:you/certs.git`) |
+| `MATCH_SSH_PRIVATE_KEY` | SSH private key that has read access to the certs repo |
+| `MATCH_PASSWORD` | The passphrase you set in Step 3 |
+| `APP_STORE_CONNECT_API_KEY_ID` | Key ID from Step 2 |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | Issuer ID from Step 2 |
+| `APP_STORE_CONNECT_API_KEY_CONTENT` | Full contents of the `.p8` file from Step 2 |
+
+#### Step 5 — Enable Push Notifications Capability
+In [developer.apple.com](https://developer.apple.com) → **Certificates, IDs & Profiles** → **Identifiers** → select `com.fantasyclimbingleague.app`:
+- Enable **Push Notifications**
+- Then re-run `bundle exec fastlane match appstore` to regenerate the provisioning profile
+
+#### Step 6 — Deploy!
+
+**Option A — Tag-based release:**
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+# → GitHub Actions builds and uploads to TestFlight automatically
+```
+
+**Option B — Manual trigger:**
+- GitHub → **Actions** → **iOS Release to App Store** → **Run workflow**
+- Choose lane: `beta` (TestFlight) or `release` (App Store)
+
+**Option C — Submit for App Store review** (after TestFlight testing):
+- Run with lane `release`, or in App Store Connect click **Submit for Review**
 
 ---
 
@@ -88,23 +138,9 @@ Runs on every push and pull request to `main`:
 - Builds the iOS app on a macOS runner (unsigned, for validation)
 
 ### `ios-release.yml` — Release to App Store
-Runs when:
-- A tag matching `v*` is pushed (e.g., `git tag v1.0.0 && git push --tags`)
-- Manually triggered via **Actions → iOS Release to App Store → Run workflow**
-
-Available lanes:
-- **`beta`** — uploads to TestFlight
-- **`release`** — uploads to App Store for review
-
-### Deploying a New Version
-
-```bash
-# Bump version in Xcode project, then tag and push:
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-Or trigger manually from GitHub Actions UI and select `beta` or `release`.
+Triggered by `v*` tag push or manually:
+- **`beta`** lane → uploads to TestFlight
+- **`release`** lane → uploads to App Store for review
 
 ---
 
@@ -112,18 +148,22 @@ Or trigger manually from GitHub Actions UI and select `beta` or `release`.
 
 ```
 .
-├── App.tsx                  # Root component (WebView)
-├── index.js                 # Entry point
-├── ios/                     # Xcode project
+├── App.tsx                              # Root component (biometric auth + WebView)
+├── index.js                             # Entry point
+├── ios/
 │   ├── Podfile
 │   └── FantasyClimbingLeague/
+│       ├── AppDelegate.swift            # Push notification callbacks
+│       ├── FantasyClimbingLeague-Bridging-Header.h  # ObjC bridge for push notifications
+│       ├── FantasyClimbingLeague.entitlements       # Push notification entitlement
+│       └── Info.plist                   # Face ID usage description + background modes
 ├── fastlane/
-│   ├── Fastfile             # Lane definitions
-│   ├── Appfile              # App metadata
-│   └── Matchfile            # Code signing config
+│   ├── Fastfile                         # beta / release lanes
+│   ├── Appfile                          # App metadata
+│   └── Matchfile                        # Code signing config
 ├── .github/workflows/
-│   ├── ios-ci.yml           # CI workflow
-│   └── ios-release.yml      # Release workflow
+│   ├── ios-ci.yml                       # CI workflow
+│   └── ios-release.yml                  # Release workflow
 └── __tests__/
     └── App.test.tsx
 ```
@@ -132,8 +172,10 @@ Or trigger manually from GitHub Actions UI and select `beta` or `release`.
 
 ## Tech Stack
 
-- **React Native** 0.85 — cross-platform mobile framework
+- **React Native** 0.85 — native iOS framework
 - **react-native-webview** — renders the fantasyclimbingleague.com website
+- **react-native-biometrics** — Face ID / Touch ID authentication
+- **@react-native-community/push-notification-ios** — APNs push notifications
 - **Fastlane** — automates building, signing, and publishing
 - **Fastlane Match** — manages iOS certificates and provisioning profiles
 - **GitHub Actions** (macOS runner) — builds the app without needing a Mac locally

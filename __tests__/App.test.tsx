@@ -30,8 +30,31 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// Mock react-native-biometrics
+jest.mock('react-native-biometrics', () => {
+  return {
+    __esModule: true,
+    default: jest.fn().mockImplementation(() => ({
+      isSensorAvailable: jest.fn().mockResolvedValue({
+        available: false,
+        biometryType: undefined,
+      }),
+      simplePrompt: jest.fn().mockResolvedValue({success: true}),
+    })),
+  };
+});
+
+// Mock @react-native-community/push-notification-ios
+jest.mock('@react-native-community/push-notification-ios', () => ({
+  requestPermissions: jest.fn().mockResolvedValue({alert: true, badge: true, sound: true}),
+  addEventListener: jest.fn(),
+  removeEventListener: jest.fn(),
+}));
+
 test('renders correctly', async () => {
-  await ReactTestRenderer.act(() => {
+  await ReactTestRenderer.act(async () => {
     ReactTestRenderer.create(<App />);
+    // Allow async biometrics check and state update to complete
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
   });
 });
