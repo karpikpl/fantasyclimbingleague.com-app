@@ -1,0 +1,58 @@
+# Fantasy Climbing League - Fastlane Configuration
+# https://docs.fastlane.tools
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Fetch certificates and provisioning profiles using match"
+  lane :certificates do
+    match(
+      type: "appstore",
+      readonly: is_ci,
+    )
+  end
+
+  desc "Build the iOS app"
+  lane :build do
+    certificates
+
+    increment_build_number(
+      build_number: ENV["BUILD_NUMBER"] || Time.now.strftime("%Y%m%d%H%M"),
+      xcodeproj: "ios/FantasyClimbingLeague.xcodeproj",
+    )
+
+    build_app(
+      workspace: "ios/FantasyClimbingLeague.xcworkspace",
+      scheme: "FantasyClimbingLeague",
+      configuration: "Release",
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: {
+          "com.fantasyclimbingleague.app" => "match AppStore com.fantasyclimbingleague.app",
+        },
+        entitlements: "ios/FantasyClimbingLeague/FantasyClimbingLeague.entitlements",
+      },
+    )
+  end
+
+  desc "Upload to TestFlight"
+  lane :beta do
+    build
+    upload_to_testflight(
+      apple_id: ENV["APPLE_APP_ID"],
+      skip_waiting_for_build_processing: true,
+    )
+  end
+
+  desc "Build and upload to App Store"
+  lane :release do
+    build
+    upload_to_app_store(
+      apple_id: ENV["APPLE_APP_ID"],
+      skip_screenshots: true,
+      skip_metadata: false,
+      force: true,
+      submit_for_review: false,
+    )
+  end
+end
